@@ -182,7 +182,7 @@ export class ResultsController extends ViewController {
         this.#selectedPlayerCards.replaceChildren();
 
         for (const card of cards) {
-            this.#selectedPlayerCards.appendChild(PlayingCard.create(card, true));
+            this.#selectedPlayerCards.appendChild(PlayingCard.create(card));
         }
     }
 

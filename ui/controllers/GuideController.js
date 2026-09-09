@@ -57,7 +57,7 @@ export class GuideController {
             const cards = [];
 
             for (const card of group) {
-                cards.push(PlayingCard.create(card, false));
+                cards.push(PlayingCard.create(card));
             }
 
             element.replaceChildren(...cards);

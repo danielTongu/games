@@ -23,8 +23,33 @@ export class Card extends Serializable {
 
         Card.#validateIdentity(this.value, this.suit);
 
-        this.score = Card.#calculateScore(this.value, this.suit);
         this.rotation = Card.#normalizeRotation(rotation);
+        Object.freeze(this);
+    }
+
+    /** @returns {number} Natural rank derived from the card value. */
+    get rank() {
+        return Constants.getCardValue(this.value).rank;
+    }
+
+    /** @returns {number} Score derived from the card identity. */
+    get score() {
+        return Constants.getCardScore(this.value, this.suit);
+    }
+
+    /**
+     * Preserves the saved card format; rank is derived when read.
+     * @param {string[]|string|null} include - Field allow-list, or the key supplied by JSON.stringify.
+     * @param {string[]} exclude - Optional field deny-list.
+     * @returns {Object} JSON-safe card data.
+     */
+    toJSON(include = null, exclude = []) {
+        return new Serializable({
+            value: this.value,
+            suit: this.suit,
+            score: this.score,
+            rotation: this.rotation
+        }).toJSON(typeof include === "string" ? null : include, exclude);
     }
 
     /**
@@ -104,20 +129,6 @@ export class Card extends Serializable {
         }
 
         return isValueValid;
-    }
-
-    /**
-     * Calculates card score.
-     *
-     * @param {string} value - Card value.
-     * @param {string} suit - Card suit.
-     * @returns {number} Card score.
-     * @throws {Error}
-     */
-    static #calculateScore(value, suit) {
-        Card.#validateIdentity(value, suit);
-
-        return Constants.getCardScore(value, suit);
     }
 
     /**
@@ -277,7 +288,7 @@ export class Card extends Serializable {
             const top = Card.from(topDiscard);
 
             if (drawAllowance > 1) {
-                isLegal = (this.isDrawCard() && this.getRank() >= top.getRank()) || this.isAceOfSpades();
+                isLegal = (this.isDrawCard() && this.rank >= top.rank) || this.isAceOfSpades();
             } else if (declaredSuit) {
                 isLegal = this.suit === declaredSuit || this.isAce() || this.isDrawFour();
             } else {
@@ -296,15 +307,6 @@ export class Card extends Serializable {
      */
     isCompatibleWith(other) {
         return this.value === other.value || this.suit === other.suit || this.isWild() || other.isWild();
-    }
-
-    /**
-     * Gets this card's natural rank.
-     *
-     * @returns {number} Card rank.
-     */
-    getRank() {
-        return Constants.getCardValue(this.value).rank;
     }
 
     /**

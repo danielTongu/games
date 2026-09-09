@@ -665,7 +665,7 @@ export class BotPlayer extends Player {
             lastPlayer.key !== this.key &&
             projectedPlayer.key === lastPlayer.key &&
             !top.isSpecial() &&
-            top.getRank() === BotPlayer.#LOWEST_ORDINARY_RANK &&
+            top.rank === BotPlayer.#LOWEST_ORDINARY_RANK &&
             card.suit === top.suit;
     }
 

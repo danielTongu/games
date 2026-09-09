@@ -740,6 +740,44 @@ export class Room extends Serializable {
     }
 
     /**
+     * Returns a discard to the acting player's hand while waiting.
+     * Validation and transfer share the room's operation queue so concurrent
+     * claims and a round starting cannot duplicate or move a stale card.
+     * @param {string} playerName - Acting player.
+     * @param {string} value - Card value.
+     * @param {string} suit - Card suit.
+     * @param {string} sortKey - Current hand ordering.
+     * @returns {Promise<Card>} Returned card.
+     */
+    async returnCard(playerName, value, suit, sortKey = "none") {
+        return this.#enqueueOperation(function returnCardOperation() {
+            if (this.status !== Constants.STATUS.WAITING) {
+                throw new UserNotification("Cards can only be returned while the room is waiting.");
+            }
+
+            const player = this.circle.getPlayer(playerName);
+            this.#assertCanAct(player);
+            const identity = new Card(value, suit, 0);
+            const index = this.discardPile.findIndex(function matchesCard(card) {
+                return card.value === identity.value && card.suit === identity.suit;
+            });
+
+            if (index === -1) {
+                throw new UserNotification("That card is no longer in the discard pile.");
+            }
+
+            player.hand.sortBy(sortKey);
+            const returned = player.hand.draw(this.discardPile[index]);
+            this.discardPile.splice(index, 1);
+            player.recordActivity();
+            this.#recordActivity();
+            this.#refreshPlayerIdleMonitoring();
+            this.#notifyStateChange();
+            return returned;
+        }.bind(this));
+    }
+
+    /**
      * Asserts a player has a card.
      *
      * @param {Player} player - Player.

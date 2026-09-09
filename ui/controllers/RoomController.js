@@ -85,12 +85,12 @@ export class RoomController extends ViewController {
     /** Loads Room dependencies and binds play controls. */
     async initialize() {
         await Promise.all([RoomRowUtils.load(), OpponentUtils.load()]);
-        PlayingCard.setDiscardTarget("#discard-pile");
         this.#playerController.initialize();
         this.#playerController.setActionHandler(this.#handlePlayerAction.bind(this));
         this.#playerController.setSortHandler(this.#handleSortChange.bind(this));
         this.#suitController.setSubmitHandler(this.#handleSuitSelection.bind(this));
         DomUtils.require("#discard-pile", HTMLElement).addEventListener("card_drop", this.#handleCardDrop.bind(this));
+        DomUtils.require("#player-hand", HTMLElement).addEventListener("card_drop", this.#handleCardReturn.bind(this));
         DomUtils.require("#leave-button", HTMLButtonElement).addEventListener("click", this.#leave.bind(this));
         DomUtils.require("#join-button", HTMLButtonElement).addEventListener("click", this.#join.bind(this));
         DomUtils.require("#invite-button", HTMLButtonElement).addEventListener("click", this.#handleInvite.bind(this));
@@ -120,6 +120,14 @@ export class RoomController extends ViewController {
     #handleCardDrop(event) {
         if (event instanceof CustomEvent && event.detail?.card) {
             this.#sendCardMove(Constants.ACTIONS.DISCARD, {card: event.detail.card});
+        }
+    }
+
+    /** Requests a discard return; the host rechecks the waiting state. */
+    #handleCardReturn(event) {
+        if (event instanceof CustomEvent && event.detail?.card &&
+            this.#room?.status === Constants.STATUS.WAITING) {
+            this.#sendCardMove(Constants.ACTIONS.RETURN, {card: event.detail.card});
         }
     }
 
@@ -202,7 +210,7 @@ export class RoomController extends ViewController {
         this.#previousStatus = nextStatus;
         this.#renderRoomInformation(room);
         this.#renderPlayers(room);
-        this.#renderDiscardPile(room.discardPile);
+        this.#renderDiscardPile(room, localPlayer);
         this.#renderLocalPlayer(localPlayer, room);
         this.#renderGameActions(localPlayer);
 
@@ -248,6 +256,7 @@ export class RoomController extends ViewController {
     static #isCardMove(action) {
         return action === Constants.ACTIONS.DRAW ||
             action === Constants.ACTIONS.DISCARD ||
+            action === Constants.ACTIONS.RETURN ||
             action === Constants.ACTIONS.PASS;
     }
 
@@ -277,12 +286,15 @@ export class RoomController extends ViewController {
     }
 
     /** Renders discard cards. */
-    #renderDiscardPile(discardPile) {
-        const cards = Array.isArray(discardPile) ? discardPile : [];
+    #renderDiscardPile(room, localPlayer) {
+        const cards = Array.isArray(room.discardPile) ? room.discardPile : [];
+        const destination = room.status === Constants.STATUS.WAITING && localPlayer !== null && !room.isBusy
+            ? DomUtils.require("#player-hand", HTMLElement)
+            : null;
         const elements = [];
 
         for (const card of cards) {
-            elements.push(PlayingCard.create(card, true));
+            elements.push(PlayingCard.create(card, card.value ? destination : null));
         }
 
         DomUtils.require("#discard-pile", HTMLElement).replaceChildren(...elements);

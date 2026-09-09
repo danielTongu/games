@@ -8,6 +8,41 @@ import { Constants } from "../core/Constants.js";
 
 const { VALUE, SUIT } = Constants.CARD;
 
+test("card properties protect identity and derive rank and score", () => {
+    const card = new Card(" A ", " SPADES ", 15);
+    assert.equal(card.value, VALUE.ACE.id);
+    assert.equal(card.suit, SUIT.SPADES);
+    assert.equal(card.rank, VALUE.ACE.rank);
+    assert.equal(card.score, 50);
+
+    for (const property of ["value", "suit", "rank", "score", "rotation"]) {
+        assert.throws(() => { card[property] = 0; }, TypeError);
+    }
+
+    assert.equal(Object.isFrozen(card), true);
+    assert.deepEqual({...card}, {value: "a", suit: "spades", rotation: 15});
+    for (const rotation of [NaN, Infinity, "15", null]) {
+        assert.throws(() => new Card("a", "spades", rotation), /finite number/);
+    }
+
+});
+
+test("card accessors preserve snapshots, filters, and round trips", () => {
+    const card = new Card(VALUE.TWO.id, SUIT.CLUBS, 15);
+    const snapshot = {value: "2", suit: "clubs", score: 20, rotation: 15};
+    assert.deepEqual(card.toJSON(), snapshot);
+    assert.deepEqual(JSON.parse(JSON.stringify(card)), snapshot);
+    assert.deepEqual(JSON.parse(JSON.stringify({card})), {card: snapshot});
+    assert.deepEqual(card.toJSON(["value", "score"], ["score"]), {value: "2"});
+    assert.deepEqual(Card.from(snapshot).toJSON(), snapshot);
+    assert.deepEqual(Card.from(card).toJSON(), snapshot);
+    assert.equal(Card.from({...snapshot, rank: -1, score: -1}).score, 20);
+    assert.equal(Card.from(snapshot).rank, VALUE.TWO.rank);
+    for (const property of ["isFaceUp", "isDraggable", "isDragging"]) {
+        assert.equal(property in card, false);
+    }
+});
+
 test("card-domain constants expose immutable canonical collections", () => {
     assert.deepEqual(Constants.CARD.STANDARD_SUITS, [SUIT.CLUBS, SUIT.DIAMONDS, SUIT.HEARTS, SUIT.SPADES]);
     assert.deepEqual(Constants.CARD.JOKER_SUITS, [SUIT.BLACK, SUIT.RED]);
@@ -37,6 +72,7 @@ test("the Game API uses one-word actions", () => {
         PASS: "pass",
         DRAW: "draw",
         DISCARD: "discard",
+        RETURN: "return",
         DECLARE: "declare"
     });
     assert.equal(Object.values(Constants.ACTIONS).every((action) => !action.includes("_")), true);

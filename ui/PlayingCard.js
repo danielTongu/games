@@ -1,23 +1,22 @@
 "use strict";
 
 import { Constants } from "../core/Constants.js";
+import { Card } from "../core/Card.js";
 import { ValidationUtils } from "../core/ValidationUtils.js";
 
 /**
- * Interactive playing-card custom element.
- *
- * Game cards are draggable. Decorative cards opt out of interaction with the
- * `data-decorative` attribute. A release over the configured discard target
- * emits a card-drop event; any other release restores the card at its origin.
- * Game legality, turn ownership, and server communication remain controller
- * responsibilities.
+ * Card presentation with optional flipping and pointer dragging.
+ * A destination supplied at creation enables interaction.
+ * Controllers own destination selection, game legality, and requests to the room host.
  */
 export class PlayingCard extends HTMLElement {
     /** @type {string} */
     static elementName = "playing-card";
 
+    static observedAttributes = ["data-is-face-up", "data-value", "data-suit"];
+
     /** @type {HTMLElement|null} */
-    static #discardTarget = null;
+    #dropTarget = null;
 
     /** @type {PlayingCard|null} */
     static #activeCard = null;
@@ -75,7 +74,7 @@ export class PlayingCard extends HTMLElement {
         didDrag: false
     };
 
-    /** Creates one interactive card element. */
+    /** Initializes card internals; the factory supplies data and destination. */
     constructor() {
         super();
         this.#onClick = this.#handleClick.bind(this);
@@ -87,41 +86,25 @@ export class PlayingCard extends HTMLElement {
     }
 
     /**
-     * Registers the discard target shared by playing-card elements.
-     *
-     * @param {string|HTMLElement} target - Target selector or element.
-     * @throws {Error}
-     */
-    static setDiscardTarget(target) {
-        let element = target;
-
-        if (typeof target === "string") {
-            element = document.querySelector(target);
-        }
-
-        if (!(element instanceof HTMLElement)) {
-            throw new Error("Playing-card discard target is invalid.");
-        }
-
-        PlayingCard.#discardTarget = element;
-    }
-
-    /**
      * Creates and populates a playing-card element.
      *
      * @param {Object} card - Card data.
-     * @param {boolean} isDraggable - Whether pointer dragging is enabled.
+     * @param {HTMLElement|null} dropTarget - Destination; omit for a static card.
      * @returns {PlayingCard} Created card element.
      * @throws {Error}
      */
-    static create(card, isDraggable) {
+    static create(card, dropTarget = null) {
+        if (dropTarget !== null && !(dropTarget instanceof HTMLElement)) {
+            throw new Error("Playing-card drop destination must be an element.");
+        }
+
         const element = document.createElement(PlayingCard.elementName);
 
         if (!(element instanceof PlayingCard)) {
             throw new Error("PlayingCard is not registered.");
         }
 
-        element.dataset.isDraggable = String(isDraggable === true);
+        element.#dropTarget = dropTarget;
         element.update(card);
 
         return element;
@@ -135,9 +118,7 @@ export class PlayingCard extends HTMLElement {
             this.#initialize();
         }
 
-        if (!this.hasAttribute("data-decorative") &&
-            !this.hasAttribute("data-drag-clone") &&
-            !this.#areEventsBound) {
+        if (this.#dropTarget !== null && !this.#areEventsBound) {
             this.#bindEvents();
         }
 
@@ -156,6 +137,66 @@ export class PlayingCard extends HTMLElement {
         this.#resetDrag(false);
     }
 
+    /** Keeps attribute-driven state, interaction, and accessibility synchronized. */
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (oldValue === newValue) {
+            return;
+        }
+
+        this.#updateAccessibility();
+    }
+
+    /** @returns {string} Card value, or an empty string for a suit-only card. */
+    get value() {
+        return this.dataset.value ?? "";
+    }
+
+    /** @returns {string} Card suit. */
+    get suit() {
+        return this.dataset.suit ?? "";
+    }
+
+    /** @returns {number|null} Derived rank, or null for a suit-only card. */
+    get rank() {
+        return this.value ? Constants.getCardValue(this.value).rank : null;
+    }
+
+    /** @returns {number|null} Derived score, or null for a suit-only card. */
+    get score() {
+        return this.value ? Constants.getCardScore(this.value, this.suit) : null;
+    }
+
+    /** @returns {number|null} Explicit rotation in degrees, or null to use CSS. */
+    get rotation() {
+        const rotation = this.style.getPropertyValue("--card-rotation");
+        return rotation ? Number.parseFloat(rotation) : null;
+    }
+
+    /** @param {number|null|undefined} rotation - Finite degrees, or null/undefined to use CSS. */
+    set rotation(rotation) {
+        if (rotation === undefined || rotation === null) {
+            this.style.removeProperty("--card-rotation");
+        } else {
+            const value = ValidationUtils.number(rotation, "Card.rotation");
+            this.style.setProperty("--card-rotation", `${value}deg`);
+        }
+    }
+
+    /** @returns {boolean} Whether a drag is currently active. */
+    get isDragging() {
+        return this.#dragState.clone !== null;
+    }
+
+    /** @returns {boolean} Whether the card face is visible. */
+    get isFaceUp() {
+        return this.dataset.isFaceUp !== "false";
+    }
+
+    /** @param {boolean} isFaceUp - Whether the card face is visible. */
+    set isFaceUp(isFaceUp) {
+        this.dataset.isFaceUp = String(ValidationUtils.boolean(isFaceUp, "PlayingCard.isFaceUp"));
+    }
+
     /**
      * Updates card presentation and interaction state.
      *
@@ -167,113 +208,40 @@ export class PlayingCard extends HTMLElement {
      */
     update(card) {
         const data = PlayingCard.#normalizeCard(card);
+        const rotation = card.rotation == null ? null : ValidationUtils.number(card.rotation, "Card.rotation");
+
+        if (this.#dragState.pointerId !== null) {
+            this.#resetDrag(this.isDragging);
+        }
 
         this.dataset.value = data.value;
         this.dataset.suit = data.suit;
 
-        this.setRotation(card.rotation);
-        this.turnFaceUp();
+        this.rotation = rotation;
         this.#updateAccessibility();
     }
 
     /**
-     * Gets normalized card identity.
-     *
-     * @returns {{value:string,suit:string}} Card identity.
-     * @throws {Error}
-     */
-    getCard() {
-        return PlayingCard.#normalizeCard({
-            value: this.dataset.value,
-            suit: this.dataset.suit
-        });
-    }
-
-    /**
-     * Applies or clears card rotation.
-     *
-     * @param {*} rotation - Rotation in degrees.
-     * @throws {Error}
-     */
-    setRotation(rotation) {
-        this.style.removeProperty("--card-rotation");
-
-        if (rotation !== undefined && rotation !== null) {
-            const value = ValidationUtils.number(rotation, "Card.rotation");
-
-            this.style.setProperty("--card-rotation", `${value}deg`);
-        }
-    }
-
-    /**
-     * Shows the card face.
-     */
-    turnFaceUp() {
-        this.dataset.isFaceDown = "false";
-        this.#updateAccessibility();
-    }
-
-    /**
-     * Hides the card face.
-     */
-    turnFaceDown() {
-        this.dataset.isFaceDown = "true";
-        this.#updateAccessibility();
-    }
-
-    /**
-     * Checks whether the card face is hidden.
-     *
-     * @returns {boolean} True when face down.
-     */
-    isFaceDown() {
-        return this.dataset.isFaceDown === "true";
-    }
-
-    /**
-     * Toggles the visible card face.
-     */
-    toggleFace() {
-        if (this.isFaceDown()) {
-            this.turnFaceUp();
-        } else {
-            this.turnFaceDown();
-        }
-    }
-
-    /**
-     * Creates or adopts the card's internal light-DOM structure.
+     * Creates presentation and, when a destination exists, interaction markup.
      */
     #initialize() {
-        let dragHandle = this.querySelector(".playing-card-drag-handle");
-        let center = this.querySelector(".playing-card-center");
+        const center = document.createElement("div");
+        center.className = "playing-card-center";
 
-        if (!(dragHandle instanceof HTMLElement) || !(center instanceof HTMLElement)) {
-            dragHandle = document.createElement("div");
-            dragHandle.className = "playing-card-drag-handle";
-
-            center = document.createElement("div");
-            center.className = "playing-card-center";
-
-            this.replaceChildren(dragHandle, center);
-        }
-
-        this.#dragHandle = dragHandle;
-        this.#isInitialized = true;
-
-        if (this.hasAttribute("data-decorative")) {
-            this.tabIndex = -1;
-            this.setAttribute("aria-hidden", "true");
-        } else {
+        if (this.#dropTarget !== null) {
+            this.#dragHandle = document.createElement("div");
+            this.#dragHandle.className = "playing-card-drag-handle";
+            this.replaceChildren(this.#dragHandle, center);
             this.tabIndex = 0;
+            this.dataset.isDragging = "false";
             this.setAttribute("role", "button");
+        } else {
+            this.replaceChildren(center);
+            this.setAttribute("role", "img");
         }
 
-        if (this.dataset.isFaceDown !== "true") {
-            this.dataset.isFaceDown = "false";
-        }
-
-        this.dataset.isDragging = "false";
+        this.#isInitialized = true;
+        this.isFaceUp = this.isFaceUp;
     }
 
     /**
@@ -286,9 +254,7 @@ export class PlayingCard extends HTMLElement {
 
         this.addEventListener("click", this.#onClick);
         this.addEventListener("keydown", this.#onKeyDown);
-        if (this.dataset.isDraggable !== "false") {
-            this.#dragHandle.addEventListener("pointerdown", this.#onPointerDown);
-        }
+        this.#dragHandle.addEventListener("pointerdown", this.#onPointerDown);
 
         this.#areEventsBound = true;
     }
@@ -320,7 +286,7 @@ export class PlayingCard extends HTMLElement {
             this.#clearDragResetTimeout();
             event.preventDefault();
         } else {
-            this.toggleFace();
+            this.isFaceUp = !this.isFaceUp;
         }
     }
 
@@ -334,7 +300,7 @@ export class PlayingCard extends HTMLElement {
 
         if (shouldToggle) {
             event.preventDefault();
-            this.toggleFace();
+            this.isFaceUp = !this.isFaceUp;
         }
     }
 
@@ -344,8 +310,7 @@ export class PlayingCard extends HTMLElement {
      * @param {PointerEvent} event - Pointer event.
      */
     #handlePointerDown(event) {
-        const canStart = event.button === 0 &&
-            (PlayingCard.#activeCard === null || PlayingCard.#activeCard === this);
+        const canStart = event.button === 0 && PlayingCard.#activeCard === null;
 
         if (canStart && this.#dragHandle !== null) {
             const bounds = this.getBoundingClientRect();
@@ -384,7 +349,7 @@ export class PlayingCard extends HTMLElement {
             if (this.#dragState.clone !== null) {
                 event.preventDefault();
                 this.#moveDrag(event.clientX, event.clientY);
-                this.#updateDiscardTarget(event.clientX, event.clientY);
+                this.#updateDropTarget(event.clientX, event.clientY);
             }
         }
     }
@@ -398,11 +363,13 @@ export class PlayingCard extends HTMLElement {
         if (event.pointerId === this.#dragState.pointerId) {
             const didDrag = this.#dragState.clone !== null;
 
-            if (didDrag) {
-                this.#dispatchDrop(event.clientX, event.clientY);
+            try {
+                if (didDrag) {
+                    this.#dispatchDrop(event.clientX, event.clientY);
+                }
+            } finally {
+                this.#resetDrag(didDrag && this.isConnected);
             }
-
-            this.#resetDrag(didDrag);
         }
     }
 
@@ -421,19 +388,16 @@ export class PlayingCard extends HTMLElement {
      * Creates the visual drag clone.
      */
     #startDrag() {
-        const clone = this.cloneNode(true);
-
-        if (!(clone instanceof HTMLElement)) {
-            throw new Error("Playing-card drag clone is invalid.");
-        }
+        const clone = PlayingCard.create(this);
+        clone.isFaceUp = this.isFaceUp;
+        clone.setAttribute("aria-hidden", "true");
 
         const bounds = this.getBoundingClientRect();
         const scale = Constants.CARD.DRAG_CLONE_SCALE;
 
         clone.dataset.dragClone = "true";
-        clone.dataset.isDragging = "false";
         clone.style.setProperty("--card-size", `${bounds.height * scale}px`);
-        clone.style.minHeight = "0";
+        clone.style.setProperty("--card-min-height", "0px");
 
         this.#dragState.clone = clone;
         this.#dragState.offsetX *= scale;
@@ -460,13 +424,13 @@ export class PlayingCard extends HTMLElement {
     }
 
     /**
-     * Updates discard-target hover state.
+     * Updates drop-target hover state.
      *
      * @param {number} clientX - Pointer X coordinate.
      * @param {number} clientY - Pointer Y coordinate.
      */
-    #updateDiscardTarget(clientX, clientY) {
-        const target = PlayingCard.#discardTarget;
+    #updateDropTarget(clientX, clientY) {
+        const target = this.#dropTarget;
         const clone = this.#dragState.clone;
 
         if (target !== null) {
@@ -492,19 +456,19 @@ export class PlayingCard extends HTMLElement {
     }
 
     /**
-     * Dispatches a card-drop event when released over the discard target.
+     * Dispatches a card-drop event when released over the drop target.
      *
      * @param {number} clientX - Pointer X coordinate.
      * @param {number} clientY - Pointer Y coordinate.
      */
     #dispatchDrop(clientX, clientY) {
-        const target = PlayingCard.#discardTarget;
+        const target = this.#dropTarget;
 
         if (target !== null && PlayingCard.#containsPoint(target, clientX, clientY)) {
             target.dispatchEvent(new CustomEvent("card_drop", {
                 bubbles: true,
                 detail: {
-                    card: this.getCard(),
+                    card: {value: this.value, suit: this.suit},
                     source: this,
                     target
                 }
@@ -518,7 +482,7 @@ export class PlayingCard extends HTMLElement {
      * @param {boolean} didDrag - Whether the interaction became a drag.
      */
     #resetDrag(didDrag) {
-        const target = PlayingCard.#discardTarget;
+        const target = this.#dropTarget;
         const pointerId = this.#dragState.pointerId;
 
         this.#unbindDragEvents();
@@ -542,7 +506,9 @@ export class PlayingCard extends HTMLElement {
             PlayingCard.#activeCard = null;
         }
 
-        this.dataset.isDragging = "false";
+        if (this.#dropTarget !== null) {
+            this.dataset.isDragging = "false";
+        }
         this.#dragState.clone = null;
         this.#dragState.pointerId = null;
         this.#dragState.startX = 0;
@@ -587,15 +553,10 @@ export class PlayingCard extends HTMLElement {
      * Updates the accessible card description.
      */
     #updateAccessibility() {
-        if (this.hasAttribute("data-decorative")) {
-            this.removeAttribute("aria-label");
-            return;
-        }
-
-        const value = this.dataset.value ?? "";
-        const suit = this.dataset.suit ?? "";
+        const value = this.value;
+        const suit = this.suit;
         const identity = value ? `${value} of ${suit}` : suit;
-        const face = this.isFaceDown() ? "face down" : "face up";
+        const face = this.isFaceUp ? "face up" : "face down";
 
         this.setAttribute("aria-label", `${identity}, ${face}`);
     }
@@ -630,6 +591,15 @@ export class PlayingCard extends HTMLElement {
 
         if (source.value !== undefined && source.value !== null && source.value !== "") {
             value = ValidationUtils.requiredString(source.value, "Card.value").toLowerCase();
+        }
+
+        if (value) {
+            const identity = new Card(value, suit, 0);
+            return {value: identity.value, suit: identity.suit};
+        }
+
+        if (!Constants.isStandardSuit(suit) && !Constants.isJokerSuit(suit)) {
+            throw new Error(`Invalid card suit: ${suit}`);
         }
 
         return {value, suit};

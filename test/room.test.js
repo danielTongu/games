@@ -17,6 +17,84 @@ function stopIdleMonitoring(room) {
     }
 }
 
+test("waiting players can return a discard without changing turn or draw allowance", async t => {
+    const room = new Room("Return Cards", 2);
+    t.after(() => stopIdleMonitoring(room));
+    const alice = await room.join("Alice");
+    await room.drawCards("Alice");
+    const card = alice.hand.cards[0];
+    const score = alice.hand.score;
+    await room.discardCard("Alice", card.value, card.suit);
+    const allowance = alice.drawAllowance;
+    const turnOwner = room.circle.turnOwnerKey;
+    let changes = 0;
+    room.onAnyChange = () => { changes += 1; };
+    const returned = await room.returnCard("Alice", card.value, card.suit);
+    assert.deepEqual(returned.toJSON(), card.toJSON());
+    assert.equal(alice.hand.score, score);
+    assert.equal(alice.hand.isCardPresent(card), true);
+    assert.equal(room.discardPile.some(entry => entry.getId() === card.getId()), false);
+    assert.equal(alice.drawAllowance, allowance);
+    assert.equal(room.circle.turnOwnerKey, turnOwner);
+    assert.equal(room.status, Constants.STATUS.WAITING);
+    assert.equal(changes, 1);
+    await assert.rejects(room.returnCard("Alice", card.value, card.suit), /no longer in the discard/);
+    assert.equal(alice.hand.score, score);
+});
+
+test("discard returns reject every non-waiting state and nonmembers without mutations", async t => {
+    const room = new Room("Guarded Returns", 2);
+    t.after(() => stopIdleMonitoring(room));
+    const alice = await room.join("Alice");
+    const card = new Card("2", "clubs", 17);
+    room.discardPile = [card];
+    for (const status of [Constants.STATUS.STARTING, Constants.STATUS.PLAYING, Constants.STATUS.PENDING, Constants.STATUS.FINISHED]) {
+        room.status = status;
+        await assert.rejects(room.returnCard("Alice", card.value, card.suit), /only be returned while/);
+        assert.equal(room.status, status);
+        assert.deepEqual(room.discardPile, [card]);
+        assert.equal(alice.hand.cards.length, 0);
+    }
+    room.status = Constants.STATUS.WAITING;
+    await assert.rejects(room.returnCard("Visitor", card.value, card.suit), /Player/);
+    await assert.rejects(room.returnCard("Alice", card.value, card.suit, "invalid"), /Invalid card sort/);
+    assert.deepEqual(room.discardPile, [card]);
+    assert.equal(alice.hand.cards.length, 0);
+});
+
+test("concurrent returns award a discard once and preserve the other cards' order", async t => {
+    const room = new Room("Concurrent Returns", 2);
+    t.after(() => stopIdleMonitoring(room));
+    const alice = await room.join("Alice");
+    const bob = await room.join("Bob");
+    const cards = [new Card("3", "hearts", 10), new Card("a", "spades", 20), new Card("5", "clubs", 30)];
+    room.discardPile = [...cards];
+    alice.hand.draw(new Card("k", "clubs", 0));
+    alice.hand.draw(new Card("2", "clubs", 0));
+    const outcomes = await Promise.allSettled([
+        room.returnCard("Alice", "a", "spades", "rank"),
+        room.returnCard("Bob", "a", "spades")
+    ]);
+    assert.equal(outcomes.filter(result => result.status === "fulfilled").length, 1);
+    assert.deepEqual(room.discardPile, [cards[0], cards[2]]);
+    assert.deepEqual(alice.hand.cards.map(card => card.value), ["2", "k", "a"]);
+    assert.equal(alice.hand.score, 83);
+    assert.equal(bob.hand.cards.length, 0);
+});
+
+test("a queued start prevents a subsequent discard return", async t => {
+    const room = new Room("Starting Returns", 2);
+    t.after(() => stopIdleMonitoring(room));
+    await room.join("Alice");
+    await room.join("Bob");
+    room.discardPile = [new Card("a", "spades", 0)];
+    const outcomes = await Promise.allSettled([room.start(), room.returnCard("Alice", "a", "spades")]);
+    assert.equal(outcomes[0].status, "fulfilled");
+    assert.equal(outcomes[1].status, "rejected");
+    assert.match(outcomes[1].reason.message, /only be returned while/);
+    assert.equal(room.status, Constants.STATUS.PLAYING);
+});
+
 async function createPlayingSession(t, playerNames = ["Alice", "Bob", "Casey"]) {
     const room = new Room(`Rules ${Math.floor(Math.random() * 1000000)}`, playerNames.length);
     t.after(() => stopIdleMonitoring(room));

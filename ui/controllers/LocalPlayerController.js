@@ -154,7 +154,7 @@ export class LocalPlayerController extends ViewController {
         this.#renderRootState(data);
         this.#renderHeader(data);
         this.#renderControls(data, sortKey);
-        this.#renderCards(data.hand.cards, sortKey);
+        this.#renderCards(data, sortKey);
     }
 
     /**
@@ -257,19 +257,23 @@ export class LocalPlayerController extends ViewController {
     /**
      * Renders local-player hand cards.
      *
-     * @param {Object[]} cards - Card data objects.
+     * @param {Object} data - Local player and room state.
      * @param {string} sortKey - Current local sort key.
      */
-    #renderCards(cards, sortKey) {
+    #renderCards(data, sortKey) {
         this.#handElement.replaceChildren(this.#drawButton);
-        const orderedCards = CardSortUtils.sorted(cards, sortKey);
+        const orderedCards = CardSortUtils.sorted(data.hand.cards, sortKey);
+        const canDiscard = !data.isBusy && (data.status === Constants.STATUS.WAITING ||
+            (data.status === Constants.STATUS.PLAYING &&
+                (!TurnUtils.hasTurnOwner(data.turnOwnerKey) || TurnUtils.isTurnOwner(data.turnOwnerKey, data.key))));
+        const destination = canDiscard ? DomUtils.require("#discard-pile", HTMLElement) : null;
 
         // The server appends drawn cards to the hand, so render from the end
         // without mutating Room data to keep the newest cards first.
         for (let index = orderedCards.length - 1; index >= 0; index -= 1) {
             const card = orderedCards[index];
 
-            this.#handElement.appendChild(PlayingCard.create(card, true));
+            this.#handElement.appendChild(PlayingCard.create(card, destination));
         }
     }
 

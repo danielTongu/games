@@ -66,15 +66,7 @@ test("browser controller, custom element, and template utility families share th
             SuitSelectionController
         ];
         const viewTypes = [HomeController, NetworkConnectionController, RoomController];
-        const playingCardMethods = [
-            "update",
-            "getCard",
-            "setRotation",
-            "turnFaceUp",
-            "turnFaceDown",
-            "isFaceDown",
-            "toggleFace"
-        ];
+        const playingCardMethods = ["update"];
 
         for (const Type of overlayTypes) {
             assert.equal(Type.prototype instanceof ViewController, true);
@@ -99,6 +91,12 @@ test("browser controller, custom element, and template utility families share th
 
         for (const method of playingCardMethods) {
             assert.equal(typeof PlayingCard.prototype[method], "function");
+        }
+
+        for (const property of ["value", "suit", "rank", "score", "rotation", "isDragging", "isFaceUp"]) {
+            const descriptor = Object.getOwnPropertyDescriptor(PlayingCard.prototype, property);
+            assert.equal(typeof descriptor.get, "function", property);
+            assert.equal(typeof descriptor.set, ["rotation", "isFaceUp"].includes(property) ? "function" : "undefined", property);
         }
 
         assert.equal(LocalPlayerController.prototype instanceof ViewController, true);
@@ -285,7 +283,7 @@ test("the shared guide initializes canonical card-sort options", () => {
 
     assert.match(INDEX_HTML, /<select id="card-sort-key-select"><\/select>/);
     assert.match(controller, /Constants\.CARD\.SORT_OPTIONS/);
-    assert.match(controller, /PlayingCard\.create\(card, false\)/);
+    assert.match(controller, /PlayingCard\.create\(card\)/);
 });
 
 test("drag clones scale from the rendered card instead of the body container", () => {

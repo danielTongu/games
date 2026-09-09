@@ -94,7 +94,7 @@ The public action set is defined by `Constants`:
 | Area | Actions |
 | --- | --- |
 | Directory and membership | `list`, `create`, `view`, `join`, `leave` |
-| Play | `start`, `draw`, `discard`, `pass`, `declare` |
+| Play | `start`, `draw`, `discard`, `return`, `pass`, `declare` |
 
 The Host MUST validate the Room and Player context for every action. A
 client-provided name, tab identifier, or room key MUST NOT grant authority over
@@ -228,7 +228,7 @@ state.
 ### 6.2 What updates activity
 
 A successful Player action MUST update both the acting Player and the Room.
-This includes drawing, discarding, passing, and declaring a suit. Starting or
+This includes drawing, discarding, returning a discard, passing, and declaring a suit. Starting or
 resetting a round also establishes fresh activity for the relevant lifecycle.
 
 Viewer activity MUST update only `Room.lastActiveAt`. A viewer becoming a
@@ -278,7 +278,13 @@ playing-only legality checks do not. A round finishes when a hand is emptied or
 the seven of hearts ends the round under its rule. Remaining hand scores
 determine the winner or tied winners.
 
-Hand sorting is committed with the next draw, discard, or pass. Temporary
+While waiting, a Player may return any real discard card to their own hand.
+The `return` action MUST validate membership, waiting state, and card presence
+inside the Room operation queue. It preserves the card's rotation, updates hand
+score and activity, and broadcasts the transfer without consuming draw allowance
+or applying card effects. Returns MUST be rejected in every other state.
+
+Hand sorting is committed with the next draw, discard, return, or pass. Temporary
 browser sorting is not a server-side action for every selection. Drawing resets
 the temporary client sort to `none` so newly drawn cards are visibly distinct
 until the Player sorts again.
@@ -367,9 +373,12 @@ body contains only the remaining detail, preventing duplicated opening text.
 - Hovered or keyboard-focused table rows use translucent cyan. A selected row
   uses solid cyan text without adding a background.
 - Mutable UI state uses existing `data-*` hooks and `DomUtils.setBooleanState`.
-- Non-decorative cards are keyboard and pointer flippable. Guide cards are not
-  draggable. Only cards in the local Player's hand are discardable, and the
-  discard-pile rectangle is the drop target.
+- A `PlayingCard` is interactive only when its controller supplies a drop
+  destination. This enables keyboard/pointer flipping and pointer dragging.
+  Eligible local-hand cards target the discard pile; waiting discard cards target
+  the local hand. Other discard states, guide cards, result cards, and the Home
+  fan are static and omit interaction markup and listeners. Suit-only markers
+  are always static. See [Card API](card-api.md) for the property and event contracts.
 - Viewers do not receive Player-only start or result overlays.
 - When a local Player exists, displayed Player sequences begin with that Player
   while preserving circle order.

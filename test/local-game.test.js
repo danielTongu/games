@@ -32,6 +32,35 @@ function latestGame(responses) {
     return responses.findLast((response) => response.view === Constants.VIEWS.ROOM)?.data;
 }
 
+for (const mode of ["direct", "hosted"]) {
+    test(`${mode} returns use authenticated membership and broadcast the updated hand`, async t => {
+        const host = new Host(new HostConfig(mode, 0, false, false, false, null));
+        t.after(() => host.shutdown());
+        const owner = createPeer(host, "owner");
+        const viewer = createPeer(host, "viewer");
+        await owner.request(Constants.ACTIONS.CREATE, {roomName: "Return Flow", playerName: "Alice", playerLimit: 2});
+        await viewer.request(Constants.ACTIONS.VIEW, {roomName: "Return Flow"});
+        const drawn = latestGame(await owner.request(Constants.ACTIONS.DRAW));
+        const card = drawn.circle.players.find(player => player.name === "Alice").hand.cards[0];
+        await owner.request(Constants.ACTIONS.DISCARD, {card});
+
+        const rejected = await viewer.request(Constants.ACTIONS.RETURN, {card, playerName: "Alice"});
+        assert.match(rejected.findLast(response => response.message)?.message.message ?? "", /Join the room/);
+        const spectatorStart = viewer.responses.length;
+        const result = latestGame(await owner.request(Constants.ACTIONS.RETURN, {card, playerName: "Someone Else"}));
+        const player = result.circle.players.find(entry => entry.name === "Alice");
+        assert.equal(player.hand.cards.length, 1);
+        assert.deepEqual(player.hand.cards[0], card);
+        assert.equal(player.hand.score, card.score);
+        assert.equal(result.discardPile.some(entry => entry.value === card.value && entry.suit === card.suit), false);
+        const spectator = latestGame(viewer.responses.slice(spectatorStart));
+        assert.ok(spectator);
+        assert.equal(spectator.localPlayerName, null);
+        assert.equal(spectator.circle.players.find(entry => entry.name === "Alice").hand.cards.length, 1);
+        assert.deepEqual(spectator.discardPile, result.discardPile);
+    });
+}
+
 function readJavaScriptSources(directory) {
     const sources = [];
 
@@ -296,29 +325,28 @@ test("Direct and Hosted modes share one Home page and one Room page", () => {
     assert.doesNotMatch(gameHtml, /id="room-mode-label"|id="connection-status-indicator"/);
     assert.match(homeHtml, /src="main\.js"/);
     assert.doesNotMatch(homeHtml, /network-connection\.js/);
-    assert.match(homeHtml, /<aside class="card-fan" aria-hidden="true"><\/aside>/);
+    assert.match(homeHtml, /<aside>\s*<div class="card-fan" aria-hidden="true"><\/div>\s*<\/aside>/);
     assert.match(
         homeHtml,
-        /<header class="hero">\s*<section class="eyebrow">[\s\S]*?<section>\s*<aside>[\s\S]*?<aside class="card-fan"/
+        /<header class="hero">\s*<section class="eyebrow">[\s\S]*?<section>\s*<aside>[\s\S]*?<aside>\s*<div class="card-fan"/
     );
     assert.match(
         homeCss,
         /\.hero > section:last-child\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:/
     );
-    assert.match(
-        homeCss,
-        /\.card-fan\s*\{[\s\S]*?position:\s*relative;/
-    );
-    assert.match(homeCss, /\.card-fan > playing-card\s*\{[\s\S]*?position:\s*absolute;/);
-    assert.match(homeCss, /--card-rotation:\s*-24deg;/);
-    assert.doesNotMatch(homeCss, /--fan-angle/);
+    const cardCss = readFileSync(new URL("../ui/styles/playing-card.css", import.meta.url), "utf8");
+    assert.match(cardCss, /\.card-fan\s*\{[\s\S]*?position:\s*relative;/);
+    assert.match(cardCss, /\.card-fan > playing-card\s*\{[\s\S]*?position:\s*absolute;/);
+    assert.match(cardCss, /--card-rotation:\s*-24deg;/);
+    assert.doesNotMatch(homeCss, /\.card-fan/);
+    assert.doesNotMatch(homeHtml, /class="[^"]*card-fan[^"]*playing-card-area/);
     assert.match(main, /new Card\(VALUE\.TWO\.id, SUIT\.CLUBS, 0\)/);
     assert.match(main, /new Card\(VALUE\.EIGHT\.id, SUIT\.DIAMONDS, 0\)/);
     assert.match(main, /new Card\(VALUE\.JACK\.id, SUIT\.SPADES, 0\)/);
     assert.match(main, /new Card\(VALUE\.ACE\.id, SUIT\.HEARTS, 0\)/);
     assert.match(main, /\.sort\(compareCardScores\)/);
-    assert.match(main, /PlayingCard\.create\(card, false\)/);
-    assert.match(main, /element\.style\.removeProperty\("--card-rotation"\)/);
+    assert.match(main, /PlayingCard\.create\(card\)/);
+    assert.match(main, /element\.rotation = null/);
     assert.match(gameHtml, /src="main\.js"/);
     assert.match(homeHtml, /href="ui\/styles\/home\.css"/);
     assert.match(gameHtml, /href="ui\/styles\/room\.css"/);
@@ -453,7 +481,7 @@ test("the shared game preserves touch-friendly card presentation", () => {
     const controller = readFileSync(new URL("../ui/controllers/LocalPlayerController.js", import.meta.url), "utf8");
 
     assert.doesNotMatch(html, /id="card-size-range"/);
-    assert.match(cardCss, /--card-size:\s*100cqh/);
+    assert.match(cardCss, /--card-height:\s*max\(100cqh, var\(--card-height-min\)\)/);
     assert.match(cardCss, /\.playing-card-drag-handle\s*\{[\s\S]*?width:\s*100%/);
     assert.match(cardCss, /\.playing-card-area:not\(#discard-pile\)[\s\S]*overflow-x:\s*auto/);
     assert.match(gameCss, /@keyframes turn-owner-border-strobe/);

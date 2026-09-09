@@ -333,6 +333,7 @@ export class Constants {
         PASS: "pass",
         DRAW: "draw",
         DISCARD: "discard",
+        RETURN: "return",
         DECLARE: "declare"
     });
 

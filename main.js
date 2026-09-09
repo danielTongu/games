@@ -36,9 +36,8 @@ function compareCardScores(left, right) {
 }
 
 function createFanCard(card) {
-    const element = PlayingCard.create(card, false);
-    element.style.removeProperty("--card-rotation");
-    element.dataset.decorative = "";
+    const element = PlayingCard.create(card);
+    element.rotation = null;
     return element;
 }
 

@@ -1,7 +1,9 @@
 :root {
-    --card-aspect-ratio: 171 / 241;
-    --card-min-height: 91px;
-    --card-size: 100cqh;
+    --card-aspect-ratio-x: 172;
+    --card-aspect-ratio-y: 242;
+    --card-aspect-ratio: var(--card-aspect-ratio-x) / var(--card-aspect-ratio-y);
+    --card-height-min: 91px;
+    --card-height: max(100cqh, var(--card-height-min));
     --card-gap: calc(var(--container-spacing, 8px) / 2);
 }
 
@@ -22,7 +24,7 @@
     scrollbar-width: none;
 
     height: 100%;
-    min-height: calc(var(--card-min-height) + var(--card-gap) * 2);
+    min-height: calc(var(--card-height-min) + var(--card-gap) * 2);
     padding: var(--card-gap) 0;
 }
 
@@ -67,13 +69,14 @@
     left: 50%;
     transform: translateX(-50%);
     height: 100%;
-    width: calc(var(--card-min-height) * 2);
-    border: 1px dashed color-mix(in srgb, var(--white) 12%, transparent);
-    border-radius: 1rem;
+    width: min(calc(var(--card-height) * 3), 100%);
+    outline: 1px dashed var(--cyan);
+    outline-offset: -1rem;
 }
 
-#discard-pile:empty[data-is-drag-over="true"]::after {
-    content: "\1F44D";
+#player-hand[data-is-drag-over="true"] {
+    outline: 1px dashed var(--cyan);
+    outline-offset: -1px;
 }
 
 #discard-pile:empty::after {
@@ -118,19 +121,18 @@ body > playing-card {
 
 playing-card,
 #card-draw-button {
+    --card-width: calc(var(--card-height) * var(--card-aspect-ratio));
+
+    user-select: none;
+
     display: inline-block;
     text-align: center;
 
-    height: var(--card-size);
-    aspect-ratio: var(--card-aspect-ratio);
-    width: auto;
-
-    --card-height: var(--card-size);
-    --card-width: calc(var(--card-height) * (170 / 240));
+    height: var(--card-height);
+    width: var(--card-width);
 
     border-radius: calc(var(--card-width) / 10);
     flex: 0 0 auto;
-    min-height: var(--card-min-height);
 }
 
 /* ========================================
@@ -141,11 +143,13 @@ playing-card,
     cursor: grab;
     touch-action: none;
     user-select: none;
+
     position: absolute;
     z-index: 3;
     top: 0;
     left: 50%;
     transform: translateX(-50%);
+
     display: grid;
     place-items: start center;
     width: 100%;
@@ -171,17 +175,12 @@ playing-card,
     cursor: grabbing;
 }
 
-playing-card[data-is-draggable="false"] > .playing-card-drag-handle {
-    cursor: pointer;
-    touch-action: manipulation;
-}
-
 /* ========================================
    PLAYING CARD
    ======================================== */
 
 playing-card {
-    --red: crimson;
+    --red: crimson; /* override base color */
     --symbol: "";
     --color: var(--black);
     --card-rotation: 0deg;
@@ -204,15 +203,17 @@ playing-card {
     box-shadow: none;
     color: var(--color);
 
-    user-select: none;
-    cursor: pointer;
     transition:
             box-shadow .3s ease,
             opacity .3s ease,
             background .3s ease;
 }
 
-playing-card:is([data-is-face-down="true"]) {
+playing-card[role="button"] {
+    cursor: pointer;
+}
+
+playing-card[data-is-face-up="false"] {
     background: var(--card-back-pattern);
     background-size: calc(var(--card-width) / 8) calc(var(--card-width) / 8);
 }
@@ -224,10 +225,6 @@ playing-card:is([data-is-face-down="true"]) {
 /* ========================================
    CARD CENTER - Rank/Suit display
    ======================================== */
-
-playing-card:hover > .playing-card-center::before {
-    transform: scale(1.05);
-}
 
 playing-card > .playing-card-center {
     position: absolute;
@@ -336,9 +333,9 @@ playing-card::after {
     transform: rotate(180deg);
 }
 
-playing-card[data-is-face-down="true"]::before,
-playing-card[data-is-face-down="true"]::after,
-playing-card[data-is-face-down="true"] > .playing-card-center {
+playing-card[data-is-face-up="false"]::before,
+playing-card[data-is-face-up="false"]::after,
+playing-card[data-is-face-up="false"] > .playing-card-center {
     display: none;
 }
 
@@ -441,11 +438,8 @@ playing-card[data-is-dragging="true"] {
 @media print {
     playing-card,
     #card-draw-button {
-        height: 240px;
-        width: 170px;
-
-        --card-height: 240px;
-        --card-width: 170px;
+        --card-height: var(--card-aspect-ratio-y);
+        --card-width: var(--card-aspect-ratio-x);
     }
 
     playing-card {
@@ -471,5 +465,70 @@ playing-card[data-is-dragging="true"] {
     #card-draw-button::before,
     #card-draw-button::after {
         transition: none;
+    }
+}
+
+/* ========================================
+   PLAYING CARD AREA - CARD FAN
+   ======================================== */
+
+.card-fan {
+    container-type: inline-size;
+    position: relative;
+    width: min(calc(100% - 56px), 340px);
+    margin-inline: auto;
+    aspect-ratio: 3 / 2;
+}
+
+.card-fan > playing-card {
+    --card-height: clamp(100px, 36cqi, 130px);
+    --card-left: 50%;
+    --card-shift-y: 0%;
+
+    position: absolute;
+    bottom: calc(var(--card-height) / 7);
+    left: var(--card-left);
+    pointer-events: none;
+    transform: translate(-50%, var(--card-shift-y)) rotate(var(--card-rotation));
+    transform-origin: 50% 110%;
+}
+
+.card-fan > playing-card:nth-child(1) {
+    --card-left: 22%;
+    --card-shift-y: 14%;
+    --card-rotation: -24deg;
+}
+
+.card-fan > playing-card:nth-child(2) {
+    --card-left: 30%;
+    --card-shift-y: 6%;
+    --card-rotation: -16deg;
+}
+
+.card-fan > playing-card:nth-child(3) {
+    --card-left: 40%;
+    --card-rotation: -8deg;
+}
+
+.card-fan > playing-card:nth-child(5) {
+    --card-left: 60%;
+    --card-rotation: 8deg;
+}
+
+.card-fan > playing-card:nth-child(6) {
+    --card-left: 70%;
+    --card-shift-y: 6%;
+    --card-rotation: 16deg;
+}
+
+.card-fan > playing-card:nth-child(7) {
+    --card-left: 78%;
+    --card-shift-y: 14%;
+    --card-rotation: 24deg;
+}
+
+@media (min-width: 721px) {
+    .card-fan > playing-card {
+        --card-height: clamp(100px, 40cqi, 170px);
     }
 }

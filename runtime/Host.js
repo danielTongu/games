@@ -905,6 +905,7 @@ export class Host {
             [Constants.ACTIONS.START]: this.#start,
             [Constants.ACTIONS.DRAW]: this.#draw,
             [Constants.ACTIONS.DISCARD]: this.#discard,
+            [Constants.ACTIONS.RETURN]: this.#returnCard,
             [Constants.ACTIONS.PASS]: this.#pass,
             [Constants.ACTIONS.DECLARE]: this.#declare
         };
@@ -1408,6 +1409,15 @@ export class Host {
 
         this.#publishDrawNotification(peer, drawn.length, true);
         await this.#continueAutomatedTurn(context.roomKey);
+    }
+
+    /** Returns a discard to the authenticated player's hand while waiting. */
+    async #returnCard(peer, data) {
+        const context = this.#requireThrottledPlayerRoom(
+            peer, data, Constants.ACTIONS.RETURN, 250, 100
+        );
+        const card = Card.from(data.card);
+        await context.room.returnCard(context.playerName, card.value, card.suit, data.sortKey);
     }
 
     /**
