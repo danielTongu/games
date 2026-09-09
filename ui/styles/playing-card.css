@@ -203,10 +203,7 @@ playing-card {
     box-shadow: none;
     color: var(--color);
 
-    transition:
-            box-shadow .3s ease,
-            opacity .3s ease,
-            background .3s ease;
+    transition:none
 }
 
 playing-card[role="button"] {
@@ -234,11 +231,19 @@ playing-card > .playing-card-center {
     pointer-events: none;
 }
 
+playing-card[data-suit="spades"] > .playing-card-center,
+playing-card[data-suit="clubs"] > .playing-card-center {
+    top: 45%;
+}
+
+playing-card[data-suit="hearts"] > .playing-card-center {
+    top: 53%;
+}
+
 playing-card > .playing-card-center::before {
     content: var(--symbol);
     font-size: var(--center-symbol-size);
     line-height: 1;
-    transition: transform .4s ease;
 }
 
 /* ========================================
@@ -362,7 +367,7 @@ playing-card[data-is-dragging="true"] {
     display: inline-block;
     background: color-mix(in srgb, var(--white) 8%, transparent);
     color: var(--white);
-    background: var(--green);
+    font-weight: lighter;
     transition:
             background .3s ease,
             border-color .3s ease,
@@ -371,7 +376,7 @@ playing-card[data-is-dragging="true"] {
 
 #card-draw-button::before,
 #card-draw-button::after {
-    /*pointer-events: none;*/
+    pointer-events: none;
     content: "";
     position: absolute;
     left: 50%;

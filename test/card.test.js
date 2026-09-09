@@ -51,8 +51,6 @@ test("card-domain constants expose immutable canonical collections", () => {
     assert.equal(Object.isFrozen(Constants.CARD.STANDARD_SUITS), true);
     assert.equal(Object.isFrozen(Constants.CARD.JOKER_SUITS), true);
     assert.equal(Object.isFrozen(Constants.CARD.STANDARD_VALUES), true);
-    assert.equal(Constants.CARD.DRAG_CLONE_SCALE, 1.5);
-    assert.equal(Constants.CARD.DRAG_CLONE_SCALE > 0, true);
 });
 
 test("default game configuration exposes three bot player-limit levels", () => {

@@ -392,16 +392,14 @@ export class PlayingCard extends HTMLElement {
         clone.isFaceUp = this.isFaceUp;
         clone.setAttribute("aria-hidden", "true");
 
-        const bounds = this.getBoundingClientRect();
-        const scale = Constants.CARD.DRAG_CLONE_SCALE;
+        // Capture the layout height before leaving the source container.
+        // A rotated card's bounding rectangle includes its rotation, not just its height.
+        const height = window.getComputedStyle(this).height;
 
         clone.dataset.dragClone = "true";
-        clone.style.setProperty("--card-size", `${bounds.height * scale}px`);
-        clone.style.setProperty("--card-min-height", "0px");
+        clone.style.setProperty("--card-height", height);
 
         this.#dragState.clone = clone;
-        this.#dragState.offsetX *= scale;
-        this.#dragState.offsetY *= scale;
         this.dataset.isDragging = "true";
 
         this.#moveDrag(this.#dragState.startX, this.#dragState.startY);

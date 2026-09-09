@@ -52,6 +52,10 @@ The decorative Home fan is hidden through its containing element's `aria-hidden`
 `update(card)` validates before changing identity or rotation, cancels any active
 drag, and preserves face state. Assign `isFaceUp` directly to flip programmatically.
 Drag previews are freshly constructed static cards, preserving face and rotation.
+At drag start, the source computed height is captured in pixels as the preview's
+`--card-height`. It stays fixed throughout the drag, with width and visual details
+derived from that height. The destination resumes its own responsive sizing after
+the transfer. Rotated bounding rectangles and viewport size do not set preview height.
 
 ## Card transfers
 

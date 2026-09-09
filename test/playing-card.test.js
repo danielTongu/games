@@ -10,6 +10,7 @@ class FakeElement extends EventTarget {
     children = [];
     captures = new Set();
     isConnected = false;
+    renderedHeight = "140px";
     style = {
         values: new Map(),
         getPropertyValue(name) { return this.values.get(name) ?? ""; },
@@ -81,7 +82,7 @@ test("PlayingCard properties and pointer lifecycle", async t => {
     globalThis.document = new EventTarget();
     document.body = new FakeElement();
     document.createElement = function(name) { return new (registered.get(name) ?? FakeElement)(); };
-    globalThis.window = {setTimeout, clearTimeout};
+    globalThis.window = {setTimeout, clearTimeout, getComputedStyle(element) { return {height: element.renderedHeight}; }};
 
     try {
         const { PlayingCard } = await import("../ui/PlayingCard.js");
@@ -223,6 +224,32 @@ test("PlayingCard properties and pointer lifecycle", async t => {
             assert.equal(document.body.children.length, 1);
             element.dispatchEvent(new Event("click"));
             assert.equal(element.isFaceUp, false);
+            element.remove();
+        });
+
+        await t.test("drag previews retain source layout height, even with rotated bounds or later resizing", () => {
+            const element = PlayingCard.create(model, new FakeElement());
+            document.body.appendChild(element);
+            const handle = element.querySelector(".playing-card-drag-handle");
+            // The transformed bounding height is 140px, independently of layout height.
+            for (const height of ["123.5px", "91px", "205.75px"]) {
+                element.renderedHeight = height;
+                pointer(handle, "pointerdown");
+                pointer(document, "pointermove", 30);
+                const clone = document.body.children.find(child => child !== element);
+                assert.equal(clone.style.getPropertyValue("--card-height"), height);
+                assert.equal(clone.style.left, "20px");
+                assert.equal(clone.style.top, "0px");
+                element.renderedHeight = "300px";
+                pointer(document, "pointermove", 60, 40);
+                assert.equal(clone.style.getPropertyValue("--card-height"), height);
+                assert.equal(clone.style.left, "50px");
+                assert.equal(clone.style.top, "30px");
+                pointer(document, "pointercancel");
+                assert.equal(element.isDragging, false);
+                assert.equal(document.body.children.length, 1);
+                assert.equal(element.style.getPropertyValue("--card-height"), "");
+            }
             element.remove();
         });
 

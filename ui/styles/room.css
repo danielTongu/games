@@ -317,14 +317,14 @@
 }
 
 #player-actions {
+    --button-radius: .9rem;
     --button-padding: 1rem;
-    --button-border: 1px solid var(--dark-green);
+    --button-border: 3px solid var(--dark-green);
     --button-background: var(--green);
 
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 1rem;
-    padding: 2px 0;
 }
 
 #card-sort-control {
