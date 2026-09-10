@@ -32,12 +32,15 @@ client data shape. The transport and persistence boundary differs by mode.
 
 ## 3. System boundaries
 
-The application has two HTML entry points and four responsibility areas:
+The application has a catalog plus game-owned Home and Room entry points:
 
 ```text
-index.html          Home page
-room.html           Room page and in-page guide
-core/               Domain rules, models, bots, and DTO mapping
+index.html          Card and dice game dashboard
+pick2/index.html       Pick 2 Home page
+pick2/room.html           Room page and in-page guide
+core/               Game-independent Room/Player foundations
+cards/              Optional card library
+pick2/core/         Pick2 rules, models, bots, and DTO mapping
 runtime/            Client, Host, browser runtime, and Node hosted runtime
 ui/                 Controllers, page state, elements, styles, and utilities
 server.js           Node Network entry point
@@ -47,8 +50,8 @@ The UI translates user interaction into named actions and renders authoritative
 snapshots. It MUST NOT implement a second copy of room rules or normalize
 competing player DTO shapes.
 
-The Host owns orchestration and authority. The core owns domain validity,
-membership, turns, cards, idle state, and round state. `StateMapper` defines the
+The Host owns orchestration and authority. Shared core owns identity and activity;
+Pick2 core owns turns, card rules, and round state. `StateMapper` defines the
 boundary between domain state and browser-safe data. Direct and Hosted hosts
 MUST preserve these responsibilities even when their transports differ.
 
@@ -315,7 +318,7 @@ identifier and current temporary hand sort before sending. Room requests use
 `data.roomName`; browser navigation uses:
 
 ```text
-room.html?mode=<direct-or-hosted>&room=<room-name>
+pick2/room.html?mode=<direct-or-hosted>&room=<room-name>
 ```
 
 Responses use one envelope in both modes:
@@ -382,9 +385,8 @@ body contains only the remaining detail, preventing duplicated opening text.
 - Viewers do not receive Player-only start or result overlays.
 - When a local Player exists, displayed Player sequences begin with that Player
   while preserving circle order.
-- Template paths MUST resolve through the shared UI root metadata so the same
-  pages work from a repository root and from a GitHub Pages subpath. Current
-  templates and styles live under `ui/`.
+- Templates resolve relative to their owning component module: shared templates
+  live under `ui/templates/`; Pick2 templates live under `pick2/ui/templates/`.
 
 ## 12. Testing and verification
 
@@ -403,16 +405,16 @@ reviewing branch coverage. Focused tests belong at the lowest stable layer:
 Any change to activity policy MUST test Player and Room timestamps, monitored
 human selection by lifecycle state, bot exclusion, demotion notification, and
 empty-room closure. Any change to shared markup or CSS MUST be checked against
-both `index.html` and `room.html`, including the mobile and 721px presentations.
+`index.html`, `pick2/index.html`, and `pick2/room.html`, including the mobile and 721px presentations.
 
 ## 13. Extension rules
 
-1. Add shared actions, statuses, card values, timing, or scores to
-   `core/Constants.js` first.
-2. Put authoritative domain policy in `core/Room`, `core/Player`, or the
-   relevant card model; keep coordination in `runtime/Host`.
-3. Add or update the stable DTO in `core/StateMapper`; do not create parallel
-   client shapes.
+1. Keep generic timing and protocol in `core/Constants.js`, card identities in
+   `cards/core/Constants.js`, and Pick2 rules and scoring in `pick2/core/Constants.js`.
+2. Keep shared Room/Player foundations free of cards; specialize them under
+   `pick2/core/` for Pick2 rules, hands, bots, and turn order.
+3. Map Pick2 state in `pick2/core/StateMapper.js` and integrate it through
+   `pick2/Game.js`. Shared hosting receives the game explicitly.
 4. Validate Room, Player, Viewer, and ownership context in the Host before
    dispatching an action.
 5. Reuse existing controller, template, validation, notification, sorting, and
@@ -428,7 +430,12 @@ both `index.html` and `room.html`, including the mobile and 721px presentations.
 
 - Default Node port: `8080`; override with `PORT`.
 - Health endpoint: `GET /health`.
-- Node serves `/` from `index.html` and `/room.html` from `room.html`.
+- Node serves the game dashboard at `/`, the Pick 2 Home page at `/pick2/index.html`,
+  and the active Room at `/room.html`. These relative links also work under a static host's subdirectory.
+- The dashboard loads only card presentation and the copyright date. Pick 2 alone
+  starts a Direct or Hosted connection. Poker and Yahtzee are noninteractive
+  coming-soon entries. Room exit and failed admission return to `pick2/index.html`;
+  the Home page links back to the dashboard.
 - Graceful shutdown handles `SIGINT` and `SIGTERM` and closes connections.
 - Uncaught exceptions and unhandled promise rejections are logged and trigger
   Network shutdown because host state may be unsafe.

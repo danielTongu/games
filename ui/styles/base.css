@@ -41,17 +41,17 @@ body {
 
     min-height: 100vh;
     margin: 0;
-    background:
+    background: var(--body-background,
         radial-gradient(circle at 75% 11%, rgba(47, 108, 89, .28), transparent 30rem),
-        var(--black);
+        var(--black));
     color: var(--ink);
     font-family: var(--body-font);
     font-size: 1rem;
     font-style: normal;
     font-weight: 400;
-    line-height: normal;
+    line-height: var(--body-line-height, normal);
     letter-spacing: normal;
-    text-align: start;
+    text-align: var(--body-text-align, start);
     text-decoration: none;
     text-transform: none;
     text-wrap: wrap;

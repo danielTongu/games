@@ -1,5 +1,9 @@
 # Card data and interaction
 
+`cards/core/Card.js` defines generic, immutable card identity. Its default score
+is its natural rank. `pick2/core/Card.js` extends it with Pick2 scoring and
+special-card rules; Pick2 Deck and Hand subclasses preserve that card type.
+
 `Card` is immutable initial game data. Its ordinary `value`, `suit`, and `rotation`
 fields are validated during construction. Only `rank` and `score` need getters,
 since they are derived from identity. Create another `Card` to change its data.
@@ -38,7 +42,8 @@ their own hand; this is not restricted to their own earlier discards.
 ## Element properties and markup
 
 The element's `value` and `suit` getters read its presentation attributes. `rank`
-and `score` are calculated, returning `null` for suit-only cards. The `rotation`
+is calculated; `score` uses the supplied game score, falling back to natural
+rank. Both return `null` for suit-only cards. The `rotation`
 and `isFaceUp` setters validate changes and synchronize CSS or accessibility.
 `isDragging` reads the active drag state, with no separate stored boolean.
 

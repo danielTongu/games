@@ -11,7 +11,11 @@ import { Host, HostChannel, HostConfig } from "./Host.js";
 
 /** Browser-only storage for serializable custom-room definitions. */
 class BrowserStore {
-    static #KEY = "pick2.directGames";
+    #key;
+
+    constructor(gameId) {
+        this.#key = `${gameId}.directGames`;
+    }
     #memory = new Map();
 
     /** @returns {Promise<Object[]>} Stored custom-room definitions. */
@@ -47,7 +51,7 @@ class BrowserStore {
         }
 
         try {
-            const serialized = storage.getItem(BrowserStore.#KEY) ?? "[]";
+            const serialized = storage.getItem(this.#key) ?? "[]";
             const stored = JSON.parse(serialized);
             const definitions = new Map();
 
@@ -68,10 +72,10 @@ class BrowserStore {
 
         try {
             if (definitions.size === 0) {
-                globalThis.localStorage?.removeItem(BrowserStore.#KEY);
+                globalThis.localStorage?.removeItem(this.#key);
             } else {
                 globalThis.localStorage?.setItem(
-                    BrowserStore.#KEY,
+                    this.#key,
                     JSON.stringify(Array.from(definitions.values()))
                 );
             }
@@ -81,14 +85,13 @@ class BrowserStore {
 
 /** Direct browser endpoint for the shared transport-neutral Host. */
 export class Browser {
-    #host = new Host(new HostConfig(
-        "direct",
-        "fill",
-        false,
-        false,
-        true,
-        new BrowserStore()
-    ));
+    #host;
+
+    constructor(game) {
+        this.#host = new Host(new HostConfig(
+            "direct", "fill", false, false, true, new BrowserStore(game.id)
+        ), game);
+    }
 
     /**
      * Opens one direct in-browser Host connection.

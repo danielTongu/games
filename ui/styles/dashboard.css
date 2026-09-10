@@ -1,0 +1,162 @@
+body[data-page="games"] {
+    --black: #080e1d;
+    --ink: #edf2fa;
+    --gray: #bac4d3;
+    --cyan: #29cfbf;
+    --light-green: #a3e8df;
+    --line: #213044;
+    --body-background: radial-gradient(ellipse at 50% 0%, #101a2b, transparent 65%), var(--black);
+    --body-line-height: 1.6;
+    --body-text-align: center;
+}
+
+.catalog-header {
+    padding-block: clamp(2rem, 5vw, 4rem) 2rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.catalog-header h1 {
+    margin: 0;
+    color: var(--light-green);
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    line-height: 1.15;
+    letter-spacing: -.045em;
+}
+
+.catalog-header p {
+    margin: 1rem 0 0;
+    color: var(--gray);
+    font-size: 1.125rem;
+}
+
+.game-catalog {
+    padding-block: 1.5rem 3rem;
+}
+
+.game-catalog h2 {
+    margin: 0 0 1.75rem;
+    color: var(--cyan);
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    letter-spacing: -.035em;
+}
+
+.game-grid {
+    display: grid;
+    gap: 1.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.game-grid > li {
+    min-width: 0;
+}
+
+.game-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+    height: 100%;
+    padding: clamp(1.25rem, 2.5vw, 1.75rem);
+    border: 1px solid var(--line);
+    border-radius: 1.75rem;
+    background: #101827;
+    box-shadow: 0 12px 32px #00000018;
+    transition: border-color .2s ease, transform .2s ease;
+}
+
+.game-tile[href]:is(:hover, :focus-visible) {
+    border-color: var(--cyan);
+    transform: translateY(-4px);
+}
+
+.game-preview {
+    container-type: inline-size;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 12rem;
+    margin-bottom: .5rem;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background: var(--black);
+}
+
+.game-preview > playing-card {
+    --card-height: min(42cqi, 132px);
+    transform: rotate(var(--card-rotation));
+}
+
+.game-preview > playing-card + playing-card {
+    margin-left: -16cqi;
+}
+
+.game-preview > playing-card:first-child {
+    --card-rotation: -14deg;
+}
+
+.game-preview > playing-card:last-child {
+    --card-rotation: 14deg;
+}
+
+.game-preview[data-game="yahtzee"] {
+    color: var(--cyan);
+    font-family: "Segoe UI Symbol", "Apple Symbols", sans-serif;
+}
+
+.game-preview[data-game="yahtzee"] > span {
+    font-size: min(22cqi, 4rem);
+    letter-spacing: .05em;
+    white-space: nowrap;
+}
+
+.game-kind {
+    color: var(--gray);
+    font-size: .875rem;
+}
+
+.game-tile h3 {
+    margin: 0;
+    font-size: 1.75rem;
+    line-height: 1.2;
+    letter-spacing: -.035em;
+}
+
+.game-description {
+    margin: 0 0 .75rem;
+    color: var(--gray);
+}
+
+.game-action {
+    margin-top: auto;
+    color: var(--gray);
+    font-size: .875rem;
+    font-weight: 600;
+}
+
+.game-tile[href] .game-action {
+    color: var(--cyan);
+}
+
+.catalog-footer {
+    padding-block: 1.75rem 2.5rem;
+    border-top: 1px solid var(--line);
+    color: var(--gray);
+}
+
+.catalog-footer small {
+    font-size: .875rem;
+}
+
+@media (min-width: 721px) {
+    .game-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .game-catalog {
+        padding-bottom: 4rem;
+    }
+}

@@ -35,7 +35,7 @@ export class Network {
      * Creates and starts the Node HTTP/WebSocket runtime.
      * @param {NetworkConfig} config - Network runtime configuration.
      */
-    constructor(config) {
+    constructor(config, game) {
         if (!(config instanceof NetworkConfig)) {
             throw new Error("Network requires a NetworkConfig instance.");
         }
@@ -48,7 +48,7 @@ export class Network {
             true,
             false,
             config.store
-        ));
+        ), game);
         this.#httpServer = http.createServer(Network.#createApp());
         this.#webSocketServer = new WebSocketServer({server: this.#httpServer});
         this.#webSocketServer.on("connection", this.#connect.bind(this));
@@ -90,7 +90,6 @@ export class Network {
         const repositoryPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
         app.use(express.static(repositoryPath));
         app.get("/", Network.#serveFile.bind(null, path.join(repositoryPath, "index.html")));
-        app.get("/room.html", Network.#serveFile.bind(null, path.join(repositoryPath, "room.html")));
         app.get("/health", Network.#serveHealth);
         return app;
     }

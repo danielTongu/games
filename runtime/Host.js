@@ -4,12 +4,9 @@
 
 import { UserNotification } from "../core/UserNotification.js";
 
-import { Card } from "../core/Card.js";
 import { Constants } from "../core/Constants.js";
 import { ValidationUtils } from "../core/ValidationUtils.js";
-import { BotPlayer, Player } from "../core/Player.js";
-import { Room } from "../core/Room.js";
-import { StateMapper } from "../core/StateMapper.js";
+import { Player } from "../core/Player.js";
 import { RateLimit } from "./RateLimit.js";
 
 /** Explicit runtime configuration for one Host. */
@@ -88,12 +85,13 @@ export class EmptyRoomStore {
 }
 
 /**
- * Transport-neutral host for Pick 2 rooms.
+ * Transport-neutral host for the selected game.
  *
  * Host owns room registration, peers, viewers, notifications, and lifecycle
  * orchestration; each Room owns players and round rules.
  */
 export class Host {
+    #game;
     // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
@@ -138,8 +136,10 @@ export class Host {
      * Creates a room Host.
      *
      * @param {HostConfig} config - Explicit Host configuration.
+     * @param {Object} game - Room factory, state mapper, actions, and automation.
      */
-    constructor(config) {
+    constructor(config, game) {
+        this.#game = game;
         if (!(config instanceof HostConfig)) {
             throw new Error("Host requires a HostConfig instance.");
         }
@@ -236,7 +236,7 @@ export class Host {
 
     /** Creates configured Rooms and their initial bot players. */
     async #initializeRooms() {
-        for (const roomConfig of Constants.DEFAULT_ROOMS) {
+        for (const roomConfig of this.#game.constants.DEFAULT_ROOMS) {
             const roomKey = this.#normalizeRoomKey(roomConfig.roomName);
             const room = this.#registerRoom(roomConfig.roomName, roomConfig.playerLimit, roomKey);
 
@@ -269,7 +269,7 @@ export class Host {
         let index = 0;
 
         while (index < count && !room.isFull()) {
-            const baseName = Constants.DIRECT_OPPONENT_NAMES[index] ?? `Bot ${index + 1}`;
+            const baseName = this.#game.constants.DIRECT_OPPONENT_NAMES[index] ?? `Bot ${index + 1}`;
             const botName = humanName !== null &&
                 Player.normalizeKey(baseName) === Player.normalizeKey(humanName)
                 ? `${baseName} Bot`
@@ -302,7 +302,7 @@ export class Host {
      * @returns {Room} Registered room.
      */
     #registerRoom(roomName, playerLimit, roomKey) {
-        const room = new Room(roomName, playerLimit);
+        const room = this.#game.createRoom(roomName, playerLimit);
 
         room.onAnyChange = this.#handleRoomChange.bind(this, roomKey, room);
 
@@ -330,7 +330,7 @@ export class Host {
 
     /** Stops idle monitoring when the active profile does not use it. */
     static #stopIdleMonitoring(room) {
-        for (const player of room.circle.players.values()) {
+        for (const player of room.players.values()) {
             player.stopIdleMonitoring();
         }
     }
@@ -419,11 +419,11 @@ export class Host {
      * @param {Object|null} message - Optional notification sent with the state.
      */
     #publishRoomState(peer, room, playerName, message = null) {
-        this.#publish(peer, StateMapper.toResponse(
+        this.#publish(peer, this.#game.stateMapper.toResponse(
             Constants.VIEWS.ROOM,
             message,
             Object.freeze({
-                ...StateMapper.toRoomData(room, playerName),
+                ...this.#game.stateMapper.toRoomData(room, playerName),
                 ...this.#getModeData(),
                 isBusy: false
             })
@@ -472,7 +472,7 @@ export class Host {
      */
     #createHomeState() {
         return Object.freeze({
-            ...StateMapper.toHomeData(this.#roomsByKey.values()),
+            ...this.#game.stateMapper.toHomeData(this.#roomsByKey.values()),
             ...this.#getModeData()
         });
     }
@@ -510,9 +510,9 @@ export class Host {
      */
     #publishInvoluntaryHomeState(peer, title, message, homeState) {
         this.#registerHomePeer(peer);
-        this.#publish(peer, StateMapper.toResponse(
+        this.#publish(peer, this.#game.stateMapper.toResponse(
             Constants.VIEWS.HOME,
-            StateMapper.toMessage(Constants.STATUS.WARNING, title, message),
+            this.#game.stateMapper.toMessage(Constants.STATUS.WARNING, title, message),
             homeState
         ));
     }
@@ -655,7 +655,7 @@ export class Host {
                 if (this.#isCurrentClient(client)) {
                     client.playerName = null;
 
-                    this.#publishRoomState(client.peer, room, null, StateMapper.toMessage(
+                    this.#publishRoomState(client.peer, room, null, this.#game.stateMapper.toMessage(
                         Constants.STATUS.WARNING,
                         "Moved to viewers",
                         "You were idle."
@@ -903,17 +903,13 @@ export class Host {
             [Constants.ACTIONS.JOIN]: this.#join,
             [Constants.ACTIONS.LEAVE]: this.#leave,
             [Constants.ACTIONS.START]: this.#start,
-            [Constants.ACTIONS.DRAW]: this.#draw,
-            [Constants.ACTIONS.DISCARD]: this.#discard,
-            [Constants.ACTIONS.RETURN]: this.#returnCard,
-            [Constants.ACTIONS.PASS]: this.#pass,
-            [Constants.ACTIONS.DECLARE]: this.#declare
         };
 
         const handler = handlers[action];
 
         if (typeof handler !== "function") {
-            throw new Error(`Unknown action: ${action}`);
+            await this.#handleGameAction(peer, action, data);
+            return;
         }
 
         await handler.call(this, peer, data);
@@ -976,7 +972,7 @@ export class Host {
      * @param {Object|null} data - View data.
      */
     #publishViewState(peer, view, data) {
-        this.#publish(peer, StateMapper.toResponse(view, null, data));
+        this.#publish(peer, this.#game.stateMapper.toResponse(view, null, data));
     }
 
     /**
@@ -998,7 +994,7 @@ export class Host {
      * @param {string} message - Message text.
      */
     #publishNotification(peer, status, title, message) {
-        this.#publish(peer, StateMapper.toResponse(null, StateMapper.toMessage(status, title, message), null));
+        this.#publish(peer, this.#game.stateMapper.toResponse(null, this.#game.stateMapper.toMessage(status, title, message), null));
     }
 
     /**
@@ -1026,22 +1022,8 @@ export class Host {
             peer,
             Constants.STATUS.INFO,
             `Welcome, ${playerName}!`,
-            "Your hand is below the discard pile.\nGood luck!"
+            this.#game.welcomeMessage
         );
-    }
-
-    /**
-     * Sends a card-draw notification.
-     *
-     * @param {Object} peer - Client peer.
-     * @param {number} count - Number of cards drawn.
-     * @param {boolean} [isMocked=false] - True to add mock emoji to mock the move.
-     */
-    #publishDrawNotification(peer, count, isMocked) {
-        if (count > 0) {
-            const emoji = isMocked ? `\n\n${Constants.EMOJIS.silly.random}` : "";
-            this.#publishNotification(peer, Constants.STATUS.INFO, "Cards Drawn", `+${count} ${emoji}`);
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -1124,9 +1106,9 @@ export class Host {
      * @returns {number} Player limit.
      */
     #normalizePlayerLimit(value) {
-        const parsedPlayerLimit = Number(value || Constants.ROOM_PLAYER_LIMIT);
+        const parsedPlayerLimit = Number(value || this.#game.constants.ROOM_PLAYER_LIMIT);
 
-        return Number.isInteger(parsedPlayerLimit) ? parsedPlayerLimit : Constants.ROOM_PLAYER_LIMIT;
+        return Number.isInteger(parsedPlayerLimit) ? parsedPlayerLimit : this.#game.constants.ROOM_PLAYER_LIMIT;
     }
 
     /**
@@ -1373,124 +1355,25 @@ export class Host {
         await this.#runAutomatedTurn(context.roomKey);
     }
 
-    /**
-     * Handles DRAW.
-     *
-     * @param {Object} peer - Client peer.
-     * @param {Object} data - Data.
-     * @returns {Promise<void>}
-     */
-    async #draw(peer, data) {
-        const context = this.#requireThrottledPlayerRoom(
-            peer, data, Constants.ACTIONS.DRAW, 400, 100
-        );
-
-        const drawn = await context.room.drawCards(context.playerName, data.sortKey);
-        const count = drawn.length;
-
-        this.#publishDrawNotification(peer, count, context.room.status === Constants.STATUS.PLAYING && count > 1);
+    /** Authenticates and throttles game-specific moves before delegating rules. */
+    async #handleGameAction(peer, action, data) {
+        const limits = this.#game.actions[action];
+        if (limits === undefined) {
+            throw new UserNotification(`Unknown action: ${action}`);
+        }
+        const context = this.#requireThrottledPlayerRoom(peer, data, action, limits.player, limits.room);
+        const notification = await this.#game.act(context.room, context.playerName, action, data);
+        if (notification !== null) {
+            this.#publishNotification(peer, notification.status, notification.title, notification.message);
+        }
         await this.#continueAutomatedTurn(context.roomKey);
     }
 
-    /**
-     * Handles DISCARD.
-     *
-     * @param {Object} peer - Client peer.
-     * @param {Object} data - Data.
-     * @returns {Promise<void>}
-     */
-    async #discard(peer, data) {
-        const context = this.#requireThrottledPlayerRoom(
-            peer, data, Constants.ACTIONS.DISCARD, 250, 100
-        );
-        const card = Card.from(data.card);
-
-        const drawn = await context.room.discardCard(context.playerName, card.value, card.suit, data.sortKey);
-
-        this.#publishDrawNotification(peer, drawn.length, true);
-        await this.#continueAutomatedTurn(context.roomKey);
-    }
-
-    /** Returns a discard to the authenticated player's hand while waiting. */
-    async #returnCard(peer, data) {
-        const context = this.#requireThrottledPlayerRoom(
-            peer, data, Constants.ACTIONS.RETURN, 250, 100
-        );
-        const card = Card.from(data.card);
-        await context.room.returnCard(context.playerName, card.value, card.suit, data.sortKey);
-    }
-
-    /**
-     * Handles PASS.
-     *
-     * @param {Object} peer - Client peer.
-     * @param {Object} data - Data.
-     * @returns {Promise<void>}
-     */
-    async #pass(peer, data) {
-        const context = this.#requireThrottledPlayerRoom(
-            peer, data, Constants.ACTIONS.PASS, 250, 100
-        );
-
-        const drawn = await context.room.passTurn(context.playerName, data.sortKey);
-
-        this.#publishDrawNotification(peer, drawn.length, true);
-        await this.#continueAutomatedTurn(context.roomKey);
-    }
-
-    /**
-     * Handles DECLARE.
-     *
-     * @param {Object} peer - Client peer.
-     * @param {Object} data - Data.
-     * @returns {Promise<void>}
-     */
-    async #declare(peer, data) {
-        const context = this.#requireThrottledPlayerRoom(
-            peer, data, Constants.ACTIONS.DECLARE, 250, 100
-        );
-        const suit = this.#requireSuit(data.suit);
-
-        await context.room.declareSuit(suit);
-        await this.#continueAutomatedTurn(context.roomKey);
-    }
-
-    /**
-     * Requires a standard card suit.
-     *
-     * @param {*} value - Suit value.
-     * @returns {string} Normalized suit.
-     * @throws {Error}
-     */
-    #requireSuit(value) {
-        return Constants.normalizeStandardSuit(ValidationUtils.requiredString(value, "Suit"));
-    }
-
-    /**
-     * Handles bot turns and suit declarations.
-     *
-     * @param {string} roomKey - Room key.
-     * @returns {Promise<void>}
-     */
+    /** Advances automated play while the selected game has an automated move. */
     async #runAutomatedTurn(roomKey) {
         const room = this.#roomsByKey.get(roomKey) ?? null;
-
-        if (room !== null) {
-            if (room.status === Constants.STATUS.PENDING) {
-                const turnOwner = room.circle.getTurnOwner();
-
-                if (turnOwner instanceof BotPlayer) {
-                    await turnOwner.chooseSuit(room);
-                    await this.#runAutomatedTurn(roomKey);
-                }
-            } else if (room.status === Constants.STATUS.PLAYING) {
-                const turnOwner = room.circle.getTurnOwner();
-
-                if (turnOwner instanceof BotPlayer) {
-                    await turnOwner.takeTurn(room);
-                    await this.#runAutomatedTurn(roomKey);
-                }
-            }
+        if (room !== null && await this.#game.runAutomatedTurn(room)) {
+            await this.#runAutomatedTurn(roomKey);
         }
     }
 

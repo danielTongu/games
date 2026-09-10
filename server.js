@@ -1,3 +1,4 @@
+import { Game } from "./pick2/Game.js";
 "use strict";
 
 import { Network, NetworkConfig } from "./runtime/Network.js";
@@ -74,7 +75,7 @@ process.once("uncaughtException", handleUncaughtException);
 process.once("unhandledRejection", handleUnhandledRejection);
 
 try {
-    network = new Network(new NetworkConfig(process.env.PORT ?? "8080", null));
+    network = new Network(new NetworkConfig(process.env.PORT ?? "8080", null), new Game());
 } catch (error) {
     console.error("Network startup failed:");
     reportError(error);

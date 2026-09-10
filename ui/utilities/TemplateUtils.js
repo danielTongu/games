@@ -40,8 +40,7 @@ export class TemplateUtils {
         const normalizedTemplateId = ValidationUtils.requiredString(templateId, "Template id");
         const normalizedTemplateFile = ValidationUtils.requiredString(templateFile, "Template file");
         ValidationUtils.optionalString(componentUrl, import.meta.url);
-        const sharedRoot = document.querySelector('meta[name="pick-2-shared-root"]')?.content || "./ui/";
-        const htmlUrl = new URL(`templates/${normalizedTemplateFile}`, new URL(sharedRoot, document.baseURI)).href;
+        const htmlUrl = new URL(`../templates/${normalizedTemplateFile}`, componentUrl).href;
         const response = await fetch(htmlUrl);
 
         if (!response.ok) {

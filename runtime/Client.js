@@ -45,7 +45,7 @@ export class Client {
     #onStatus = null;
     #onData = null;
     #tabId = Client.#getTabId();
-    #sortKey = Constants.CARD.SORT_OPTIONS[0];
+
 
     /** @param {{open:Function}} endpoint - Browser or Network endpoint. */
     constructor(endpoint) {
@@ -56,16 +56,6 @@ export class Client {
         }
 
         this.#endpoint = source;
-    }
-
-    /** @returns {string} Current hand sort key. */
-    get sortKey() {
-        return this.#sortKey;
-    }
-
-    /** @param {string} value - New hand sort key. */
-    set sortKey(value) {
-        this.#sortKey = ValidationUtils.requiredString(value, "Sort key");
     }
 
     /**
@@ -115,8 +105,7 @@ export class Client {
             action: normalizedAction,
             data: {
                 ...actionData,
-                tabId: this.#tabId,
-                sortKey: this.#sortKey
+                tabId: this.#tabId
             }
         }) ?? false;
     }
@@ -188,12 +177,12 @@ export class Client {
     /** @returns {string} Stable browser-tab identifier. */
     static #getTabId() {
         const storage = globalThis.sessionStorage;
-        let tabId = storage?.getItem("pick2.tabId") ?? "";
+        let tabId = storage?.getItem("game.tabId") ?? "";
 
         if (!tabId) {
             tabId = globalThis.crypto?.randomUUID?.() ??
                 `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-            storage?.setItem("pick2.tabId", tabId);
+            storage?.setItem("game.tabId", tabId);
         }
 
         return tabId;

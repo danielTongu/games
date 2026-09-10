@@ -4,10 +4,13 @@
  * Stores page-to-page play mode and Room action intent for one browser tab.
  */
 export class PageState {
-    static #MODE_KEY = "pick2.mode";
-    static #INTENT_KEY = "pick2.gameIntent";
-    static #NOTICE_KEY = "pick2.notice";
-    static #HOSTED_URL_KEY = "pick2.hostedUrl";
+    static #namespace() {
+        return globalThis.document?.body?.dataset.game ?? "game";
+    }
+    static get #MODE_KEY() { return `${this.#namespace()}.mode`; }
+    static get #INTENT_KEY() { return `${this.#namespace()}.gameIntent`; }
+    static get #NOTICE_KEY() { return `${this.#namespace()}.notice`; }
+    static get #HOSTED_URL_KEY() { return `${this.#namespace()}.hostedUrl`; }
 
     /** @returns {"direct"|"hosted"} Selected play mode. */
     static getMode() {
@@ -84,7 +87,7 @@ export class PageState {
     /** @returns {string|null} Configured server origin, when supplied. */
     static getConfiguredServerOrigin() {
         const origin = globalThis.document
-            ?.querySelector('meta[name="pick-2-server-origin"]')
+            ?.querySelector('meta[name="game-server-origin"]')
             ?.getAttribute("content")
             ?.trim();
 
